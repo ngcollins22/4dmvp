@@ -2,7 +2,7 @@
     Header file containing implemented functions related to map objects
 
 */
-#include <node.h>
+#include "node.h"
 #include <stdio.h>
 
 /*

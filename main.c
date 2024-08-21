@@ -5,8 +5,7 @@
     Date Created: 8/18/24
 
 */
-#include <map.h>
-#include <node.h>
+#include "map.h"
 
 /*
     TODO: Create a map, populate with obstacles, write out to a file

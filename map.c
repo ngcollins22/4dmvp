@@ -1,10 +1,10 @@
 
-#include <map.h>
+#include "map.h"
 
 /*
     Returns a pointer to a blank map with given length and width
 */
-extern map_t *create_blank_map(unsigned int l, unsigned int w) {
+map_t *create_blank_map(unsigned int l, unsigned int w) {
     map_t* map = (map_t*) malloc(sizeof(map_t));
     map->l = l;
     map->w = w;
