@@ -20,12 +20,14 @@ void chooseRandom(flightplan_t *plan, map_t *map, int id) {
 
     plan->end = n;
     plan->id = id;
+    plan->wasSuccess = 0;
+    plan->timeToSolve = 0;
 
     //modify flightplan
 }
 
 
-int pathfind(flightplan_t *plan, map_t *map, double *compTime) {
+int pathfind(flightplan_t *plan, map_t *map) {
     clock_t beginTime = clock();
 
     // pull plan into convenient format
@@ -39,6 +41,99 @@ int pathfind(flightplan_t *plan, map_t *map, double *compTime) {
     node_t *startNode = nodeOfInterest;
     node_t *goalNode = pullIndex(map, plan->end);
 
+    cleanMap(map);
+
+
+    node_t **openList = (node_t**) malloc(sizeof(node_t*));
+    node_t **closedList = (node_t**) malloc(sizeof(node_t*));
+    int openCount = 1;
+    int closedCount = 0;
+    int success = 0;
+
+    calc_heuristic(map, startNode, goalNode);
+    openList[0] = startNode;
+
+    while(openCount > 0) {
+
+        //search for the node on the open list with the least f cost
+        int lowestF = __INT_MAX__;
+        int index = -1;
+        for(int i = 0; i < openCount; i++) {
+            node_t *currentNode = openList[i];
+            if(fcost(currentNode) < lowestF) {
+                lowestF = fcost(currentNode);
+                index = i;
+                nodeOfInterest = currentNode;
+            }
+        }
+
+        //if the node of interest is the goal node
+        if(nodeOfInterest == goalNode) {
+            success = 1; //win!
+            break;
+        }
+        //otherwise
+
+        //move this node to the closed list
+
+        //check every neighbor
+        for(int dx = -1; dx <= 1; dx++) {
+            for(int dy = -1; dy <= 1; dy++) {
+                if(dx == 0 && dy == 0) continue; //skip if its found itself
+                int x = nodeOfInterest->x + dx;
+                int y = nodeOfInterest->y + dy;
+                if(x < 0 || x >= map->l || y < 0 || y >= map->w) continue; //out of bounds
+                int n;
+                getIndex(map, x, y, &n);
+                node_t *neighbor = pullIndex(map, n);
+
+                if(contains(closedList, &closedCount, neighbor) || !isfree(neighbor)) continue; //skip if on closed or not free
+
+                if(contains(openList, &openCount, neighbor)) { //node is on the open list already
+                    int currentG = neighbor->gcost;
+                    int newG = nodeOfInterest->gcost + sqrt(dx + dy);
+                    if(newG < currentG) { //see if G cost this way is better
+                        neighbor->gcost = newG; //update if so
+                        neighbor->prev = nodeOfInterest;
+                    }
+                } else { //node is not already on the open list
+                    addToList(&openList, &openCount, neighbor); //add it to the open list
+                    calc_heuristic(map, neighbor, goalNode); //calc h and g costs
+                    neighbor->gcost = nodeOfInterest->gcost + sqrt(pow(dx,2) + pow(dy,2)); //can only be 1 or zero so squaring doesn't do anything
+                    neighbor->prev = nodeOfInterest; //set for backtracking later
+                }
+            }
+        }
+
+        removeFromList(&openList, &openCount, index);
+        addToList(&closedList, &closedCount, nodeOfInterest);
+    }
+
+    free(openList);
+    free(closedList);
+
+    if(success == 0) { //did not find the goal node/couldn't find the goal node
+        //clean the map (wipe h and g costs)
+        cleanMap(map);
+        clock_t endTime = clock();
+        plan->timeToSolve = 1000*((double)(endTime - beginTime))/CLOCKS_PER_SEC;
+        return 0;
+    }
+
+    //otherwise I found the goal node
+
+    //backtrack
+    node_t *nodeOnReturn = goalNode;
+    while(nodeOnReturn->prev != NULL) {
+        nodeOnReturn->status = OCCUPIED;
+        nodeOnReturn->occupiedBy = plan->id;
+        nodeOnReturn = nodeOnReturn->prev;
+    }
+
+    //clean the map (wipe h and g costs)
+
+    plan->wasSuccess = 1;
+    /*
     //allocate list of pointers to nodes size I might actually need
     calc_heuristic(map, startNode, goalNode); //just doing this to guess the length I'll need
     int guessListLength = startNode->hcost; //guess for how long of an array I need
@@ -152,6 +247,8 @@ int pathfind(flightplan_t *plan, map_t *map, double *compTime) {
         nodeOnReturn = nodeOnReturn->prev;
     }
 
+    */
+
     //find neighbors and add to list
         //calculate g cost for each neighbor (only replace if lower)
         //calculate h cost of each neighbor (only if it hasn't been seen)
@@ -161,19 +258,53 @@ int pathfind(flightplan_t *plan, map_t *map, double *compTime) {
         //select lowest f cost node and repeat
         //when we find the final node we're good
 
-    //estimate the maximum number of items I'm gonna realistically need
-
-
-    
-
-    //A* my way to the end node
-
-    //compile and record flight plan correctly
-
-    //update map_t
 
     clock_t endTime = clock();
-    *compTime = endTime - beginTime;
+    plan->timeToSolve = 1000*((double)(endTime - beginTime))/CLOCKS_PER_SEC;
+    return 1;
+}
+
+void cleanMap(map_t *map) {
+    for(int i = 0; i < getSize(map); i++) {
+        node_t *node = pullIndex(map, i);
+        if(isfree(node)) { // if the node is free (not occuped and not an obstacle), want to preserve it is was on a finalized path
+            //wipe g and h costs
+            node->gcost = 0;
+            node->hcost = 0;
+            node->prev = NULL;
+        }
+    }
+}
+
+void removeFromList(node_t ***list, int *size, int index) {
+    //shift every index forward back by 1
+    for(int i = index; i < (*size)-1; i++) {
+        (*list)[i] = (*list)[i+1]; //point to the next one instead
+    }
+    //decrement the size
+    *size = *size -1;
+    //realloc the list
+    *list = (node_t**) realloc(*list, sizeof(node_t*) * (*size));
+}
+
+void addToList(node_t ***list, int *size, node_t *node) {
+    //increment the size
+    *size = *size + 1;
+    *list = (node_t**) realloc(*list, sizeof(node_t*) * (*size));
+    //add the node as the last index
+    (*list)[(*size)-1] = node;
+}
+
+int contains(node_t **list, int *size, node_t *node) {
+    int found = 0;
+    if(*size == 0) return 0;
+    for(int i = 0; i < *size;i++) {
+        if(list[i] == node) {
+            found = 1;
+            break;
+        }
+    }
+    return found;
 }
 
 int fcost(node_t *node) {
@@ -211,7 +342,7 @@ void calc_heuristic(map_t *map, node_t *nodeOfInterest, node_t *goalNode) {
     x2 = nodeOfInterest->x;
     y1 = goalNode->y;
     y2 = nodeOfInterest->y;
-    double hc_sq = pow(x1 - x2,2) + pow(y1 - y2,2);
+    double hc_sq = sqrt(pow(x1 - x2,2) + pow(y1 - y2,2));
     nodeOfInterest->hcost = (float) hc_sq;
 }
 
@@ -230,7 +361,7 @@ map_t *create_blank_map(unsigned int l, unsigned int w) {
         getPosition(map, i, &x, &y);
         node->x = x;
         node->y = y;
-        node->seen = 0;
+        node->occupiedBy = 0;
         node->hcost = 0;
         node->gcost = 0;
         node->prev = NULL;
@@ -310,12 +441,59 @@ void displayMap(map_t *map) {
     printf("\n");
 }
 
-extern void displayNode(node_t * node) {
-    printf("Node: n: %d x: %d y:%d seen: %d h: %f g: %f status: %d\n", node->index, node->x, node->y, node->seen, node->hcost, node->gcost, node->status);
+void displayNode(node_t * node) {
+    printf("Node: n: %d x: %d y:%d seen: %d h: %f g: %f status: %d\n", node->index, node->x, node->y, node->occupiedBy, node->hcost, node->gcost, node->status);
 }
 
 
-extern void freeGrid(map_t *map) {
+void freeGrid(map_t *map) {
     free(map->grid);
 }
 
+int runIteration(FILE* out, int sz, float rho, int id) {
+    map_t* map = create_blank_map(sz, sz);
+    populate_with_obstacles(map, rho);
+
+    int numIterationsComplete = 0;
+    int lastResult = 1;
+
+    printf("Iteration: %dx%d %f \n", sz, sz, rho);
+
+    while(lastResult != 0) {
+        fprintf(out,"%d,%d,",id, numIterationsComplete+1);
+        flightplan_t *plan = (flightplan_t *) malloc(sizeof(flightplan_t));
+
+        chooseRandom(plan, map, numIterationsComplete+2);
+
+        int success = pathfind(plan, map);
+        lastResult = success;
+
+        //record results
+        printf("#%d: %s in %lf ms \n", numIterationsComplete+1, success == 1 ? "Found" : "Not Found", plan->timeToSolve);
+        fprintf(out,"%.4f,%d\n",plan->timeToSolve,success);
+        numIterationsComplete += success;
+        free(plan);
+    }
+    printf("Total: %d\n", numIterationsComplete);
+
+    freeGrid(map);
+    free(map);
+
+}
+
+void runTest(int num, int sz, float rho) {
+    char fileNameDetailed[50], fileNameSummary[50];
+    sprintf(fileNameDetailed, "results_%dx%d_%.2f_%d_detailed.csv", sz, sz, rho, num);
+    sprintf(fileNameSummary, "results_%dx%d_%.2f_%d_summary.csv", sz, sz, rho, num);
+
+    FILE* detailed = fopen(fileNameDetailed,"w");
+    //FILE* summary = fopen(fileNameSummary, "w");
+    fprintf(detailed, "Run,Iteration Number,Time to Solve(ms),Success\n");
+    //fprintf(summary, "Run,# Paths fit, Av. Comp Time (ms)\n");
+    for(int i = 0; i < num; i++) {
+        runIteration(detailed, sz, rho, i);
+    }
+
+    fclose(detailed);
+    //fclose(summary);
+}

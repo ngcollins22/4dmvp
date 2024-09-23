@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <unistd.h>
+#include <string.h>
 
 
 
@@ -16,7 +17,7 @@ extern void chooseRandom(flightplan_t *plan, map_t *map, int id);
 /*
     
 */
-extern int pathfind(flightplan_t *plan, map_t *map, double *compTime);
+extern int pathfind(flightplan_t *plan, map_t *map);
 
 
 extern void printplan(flightplan_t *plan, map_t *map);
@@ -31,6 +32,14 @@ extern int isfree(node_t *node);
 */
 //extern map_t* mapFromFile(FILE *in);
 
+
+extern void removeFromList(node_t ***list, int *size, int index);
+
+extern void addToList(node_t ***list, int *size, node_t *node);
+
+extern int contains(node_t **list, int *size, node_t *node); 
+
+extern void cleanMap(map_t *map);
 /*
     Helper function to read a list of flights from a file
 */
@@ -101,3 +110,6 @@ extern void freeGrid(map_t *map);
 extern int fcost(node_t *node);
 
 
+extern int runIteration(FILE* out, int sz, float rho, int id);
+
+extern void runTest(int num, int sz, float rho);

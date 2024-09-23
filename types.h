@@ -17,7 +17,7 @@ typedef struct Node node_t;
 */
 typedef struct Node {
     status_t status;
-    int seen;
+    int occupiedBy;
     float hcost, gcost;
     node_t *prev;
     int index;
@@ -42,5 +42,6 @@ typedef struct Map {
 typedef struct FlightPlan {
     int start, end;
     int id;
-    node_t *path;
+    int wasSuccess;
+    double timeToSolve;
 } flightplan_t;
