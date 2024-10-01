@@ -90,8 +90,9 @@ int pathfind(flightplan_t *plan, map_t *map) {
                 if(contains(closedList, &closedCount, neighbor) || !isfree(neighbor)) continue; //skip if on closed or not free
 
                 if(contains(openList, &openCount, neighbor)) { //node is on the open list already
-                    int currentG = neighbor->gcost;
-                    int newG = nodeOfInterest->gcost + sqrt(dx + dy);
+                    float currentG = neighbor->gcost;
+                    float newG = nodeOfInterest->gcost + sqrt(dx + dy);
+                    //printf("g: %lf\n", currentG);
                     if(newG < currentG) { //see if G cost this way is better
                         neighbor->gcost = newG; //update if so
                         neighbor->prev = nodeOfInterest;
@@ -331,7 +332,6 @@ void getPosition(map_t *map, int n, int *x, int *y) {
     *y = (n - *x) / map->l;
 }
 
-
 void getIndex(map_t *map, int x, int y, int *n) {
     *n = y*map->l + x;
 }
@@ -441,6 +441,26 @@ void displayMap(map_t *map) {
     printf("\n");
 }
 
+void exportMap(map_t *map) {
+    FILE* out;
+    out = fopen("map_export.csv", "w");
+    node_t *grid = map->grid;
+    fprintf(out, "x,y,index,h,g,status,occupiedBy,xprev,yprev\n");
+    for(int i = 0; i < getSize(map); i++) {
+        //displayNode(&grid[i]);
+        exportNode(out, grid[i]);
+    }
+    fclose(out);
+}
+
+void exportNode(FILE* out, node_t node) {
+    if(node.prev != NULL) {
+        fprintf(out, "%d,%d,%d,%lf,%lf,%d,%d,%d,%d\n",node.x,node.y,node.index,node.hcost,node.gcost,node.status,node.occupiedBy,node.prev->x,node.prev->y);
+    } else {
+        fprintf(out, "%d,%d,%d,%lf,%lf,%d,%d\n",node.x,node.y,node.index,node.hcost,node.gcost,node.status,node.occupiedBy);
+    }
+}
+
 void displayNode(node_t * node) {
     printf("Node: n: %d x: %d y:%d seen: %d h: %f g: %f status: %d\n", node->index, node->x, node->y, node->occupiedBy, node->hcost, node->gcost, node->status);
 }
@@ -475,7 +495,8 @@ int runIteration(FILE* out, int sz, float rho, int id) {
         free(plan);
     }
     printf("Total: %d\n", numIterationsComplete);
-
+    displayMap(map);
+    exportMap(map);
     freeGrid(map);
     free(map);
 
