@@ -41,12 +41,22 @@ node_t** getNeighbors(map_t *map, node_t* node, point_t goal, int* numberOfNeigh
 void addPathToTensor(ot_t *ot, path_t* path) {
     //add a solved path to a tensor - this is the geonfencing part
     int tf0 = ot->tf;
-    int tf1 = path->tf;
+    int tf1 = ceil(path->tf);
+    printf("tf0: %d, tf1: %d", tf0, tf1);
     if(tf1 > tf0) { //my new path demands an extended time horizon
         //extend the time horizon of the tensor
+        extendTimeHorizon(ot, ceil(tf1-tf0));
     }
     //populate the tensor with the path's waypoints geofenced
-    
+    for(int i = 0; i < path->pathLength; i++) {
+        wp_t wp = path->waypoints[i];
+        printf("Waypoint: (%d,%d,%d) at t = %f setting values at t = %d and t = %d to 1", wp.location.x, wp.location.y, wp.location.z, wp.time, (int) floor(wp.time), (int) ceil(wp.time));
+        int nl = getIndex(ot, wp.location.x, wp.location.y, wp.location.z, (int) floor(wp.time));
+        int nu = getIndex(ot, wp.location.x, wp.location.y, wp.location.z, (int) ceil(wp.time));
+        setValueAt(ot, nl, 1);
+        setValueAt(ot, nu, 1);
+        //printf("Setting a value \n");
+    }
 }
 
 void addWaypointToTensor(ot_t *ot, wp_t wp) {
@@ -135,10 +145,21 @@ path_t pathFind(map_t *map, point_t start, point_t end) {
         
         for(int i = 0; i < numNeighbors; i++) {
             node_t *neighbor = neighborList[i];
-            if(neighbor->t > tf) { //I'm past the current time horizon
+            int alreadySeen = 0;
+            for(int j = 0; j < closedCount; j++) {
+                if(match(neighbor->point, closedList[j]->point) && closedList[j]->t == neighbor->t) {
+                    alreadySeen = 1;
+                    break;
+                }
+            }
+            if(alreadySeen == 1) {
+                free(neighbor);
+            } else if(neighbor->t > (tf-1)) { //I'm past the current time horizon
                 addToList(&openList, &openCount, neighbor); //add to the open list
-            } else if(spaceCheck(map, neighbor)) {
+            } else if(spaceCheck(map, neighbor)) { //I pass the space check
                 addToList(&openList, &openCount, neighbor);
+            } else { //I can't add this node for some reason
+                free(neighbor);
             }
         }
         free(neighborList);

@@ -1,6 +1,7 @@
 #include "ot.h"
 #include <math.h>
 
+
 /*
     Header file containing functions and utilites to pathfind
 */

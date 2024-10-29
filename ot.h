@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /*
     Header file containing data structures of maps and occupancy tensors
@@ -62,8 +63,6 @@ extern void setValueAt(ot_t *ot, int index, int value);
 extern ot_t *copyTensor();
 
 extern void exportMap(map_t *map, FILE* out);
-
-extern void exportTensor(ot_t *ot, FILE* out);
 
 extern void extendTimeHorizon(ot_t *ot, int n);
 
