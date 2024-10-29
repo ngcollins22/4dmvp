@@ -1,6 +1,5 @@
 #include "flights.h"
 
-
 void chooseRandom(flightplan_t *plan, map_t *map, int id) {
     //choose random index for start, check if free, repeat for end
     srand((unsigned int)clock());
@@ -25,7 +24,6 @@ void chooseRandom(flightplan_t *plan, map_t *map, int id) {
 
     //modify flightplan
 }
-
 
 int pathfind(flightplan_t *plan, map_t *map) {
     clock_t beginTime = clock();
@@ -464,7 +462,6 @@ void exportNode(FILE* out, node_t node) {
 void displayNode(node_t * node) {
     printf("Node: n: %d x: %d y:%d seen: %d h: %f g: %f status: %d\n", node->index, node->x, node->y, node->occupiedBy, node->hcost, node->gcost, node->status);
 }
-
 
 void freeGrid(map_t *map) {
     free(map->grid);

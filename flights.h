@@ -109,7 +109,6 @@ extern void freeGrid(map_t *map);
 
 extern int fcost(node_t *node);
 
-
 extern int runIteration(FILE* out, int sz, float rho, int id);
 
 extern void runTest(int num, int sz, float rho);
@@ -117,3 +116,5 @@ extern void runTest(int num, int sz, float rho);
 extern void exportNode(FILE* out, node_t node);
 
 extern void exportMap(map_t *map);
+
+extern int isOccupied(int x, int y, int t);

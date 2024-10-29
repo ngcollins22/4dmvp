@@ -1,5 +1,8 @@
 // Header file for all the types used here
 
+
+
+
 /*
     Status enum for tracking if a node is empty, permanently blocked, or temporarily occupied
 */
@@ -9,7 +12,6 @@ typedef enum Status {
     OCCUPIED,
 } status_t;
 
-
 typedef struct Node node_t;
 
 /*
@@ -18,21 +20,13 @@ typedef struct Node node_t;
 typedef struct Node {
     status_t status;
     int occupiedBy;
-    float hcost, gcost;
+    int* occupiedAt;
+    float hcost, gcost; 
     node_t *prev;
     int index;
     int x, y;
 } node_t;
 
-/*
-    A map has dimensions and contains an array representing it's tiles. 
-*/
-typedef struct Map {
-    node_t* grid;
-    int w;
-    int l;
-    float density;
-} map_t;
 
 
 
@@ -45,3 +39,5 @@ typedef struct FlightPlan {
     int wasSuccess;
     double timeToSolve;
 } flightplan_t;
+
+
