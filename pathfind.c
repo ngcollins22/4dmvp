@@ -1,8 +1,22 @@
 #include "pathfind.h"
+#include <unistd.h>
 
-const float WT = 0.5;
+
+const float WT = 0.3;
 const float WG = 1 - WT;
 const float GEOFENCE_RADIUS = 3;
+
+/*
+    Known issues:
+        Something's up with the weighting that makes things cycle sometimesz
+        Things are probably being re-added to the open list for some reason
+        The open and closed lists should really be replaced with hash tables or min heaps
+
+        Update "wait a step to launch" manuever to be as expensive as the entire heuristic
+
+        Need to actually implement spaceclaim and spacecheck
+
+*/
 
 
 node_t** getNeighbors(map_t *map, node_t* node, point_t goal, int* numberOfNeighbors) {
@@ -21,7 +35,7 @@ node_t** getNeighbors(map_t *map, node_t* node, point_t goal, int* numberOfNeigh
                 newPoint.y = node->point.y + dy;
                 newPoint.z = node->point.z + dz;
                 if(newPoint.x < 0 || newPoint.y < 0 ||newPoint.z < 0 || newPoint.x >= map->W || newPoint.y >= map->W || newPoint.z >= map->W) continue;
-                if(moveType == 0) { //hover move!
+                if(moveType == 0 && node->prev == NULL) { //hover move! only permissible if we're at the start
                     addToList(&neighborList, &numNeighbors, makeNode(node, newPoint, WG*0 + 2*WT*1, 1, goal));
                 } else if (moveType == 1) { //orthogonal traverse
                     addToList(&neighborList, &numNeighbors, makeNode(node, newPoint, WG*1 + WT*1, 1, goal));
@@ -51,16 +65,32 @@ void addPathToTensor(ot_t *ot, path_t* path) {
     for(int i = 0; i < path->pathLength; i++) {
         wp_t wp = path->waypoints[i];
         printf("Waypoint: (%d,%d,%d) at t = %f setting values at t = %d and t = %d to 1", wp.location.x, wp.location.y, wp.location.z, wp.time, (int) floor(wp.time), (int) ceil(wp.time));
-        int nl = getIndex(ot, wp.location.x, wp.location.y, wp.location.z, (int) floor(wp.time));
-        int nu = getIndex(ot, wp.location.x, wp.location.y, wp.location.z, (int) ceil(wp.time));
-        setValueAt(ot, nl, 1);
-        setValueAt(ot, nu, 1);
+        addWaypointToTensor(ot, wp);
         //printf("Setting a value \n");
     }
 }
 
 void addWaypointToTensor(ot_t *ot, wp_t wp) {
-
+    int lowerTimeIndex = (int) floor(wp.time);
+    int higherTimeIndex = (int) ceil(wp.time);
+    int x = wp.location.x;
+    int y = wp.location.y;
+    int z = wp.location.z;
+    for(int dz = -1; dz <= 1; dz++) {
+        for(int dy = -1; dy <= 1; dy++) {
+            for(int dx = -1; dx <= 1; dx++) {
+                //block off every neighbor
+                int nx = x + dx;
+                int ny = y + dy;
+                int nz = z + dz;
+                if(nx < 0 || ny < 0 || nz < 0 || nx >= ot->W || ny >= ot->W || nz >= ot->W) continue;
+                int il = getIndex(ot, nx, ny, nz, lowerTimeIndex);
+                int iu = getIndex(ot, nx, ny, nz, higherTimeIndex);
+                setValueAt(ot, il, 1);
+                setValueAt(ot, iu, 1);
+            }
+        }
+    }
 }
 
 float dist(point_t p1, point_t p2) {
@@ -102,6 +132,7 @@ point_t point(int x, int y, int z) {
 path_t pathFind(map_t *map, point_t start, point_t end) {
     //start the timer
     clock_t beginTime = clock();
+    printf("Finding Path from (%d,%d,%d) -> (%d,%d,%d) \n", start.x, start.y, start.z, end.x, end.y, end.z);
     //grab the tensor from the current map
     ot_t* ot = map->occupancytensor;
     int tf = ot->tf;
@@ -122,8 +153,7 @@ path_t pathFind(map_t *map, point_t start, point_t end) {
 
     while(openCount > 0) { //while open list remains not empty
         //find the node on the open list with the lowest f cost
-        //printf("A* iteration start: ");
-        int lowestF = __INT_MAX__;
+        float lowestF = 9999;
         int index = -1;
         for(int i = 0; i < openCount; i++) {
             node_t *currentNode = openList[i];
@@ -133,12 +163,17 @@ path_t pathFind(map_t *map, point_t start, point_t end) {
                 nodeOfInterest = currentNode;
             }
         }
+        //printf(nodeOfInterest == NULL);
+        printf("Node of Interest: (%d,%d,%d) @ %f w/ g = %f, h = %f, f = %f \n", nodeOfInterest->point.x, nodeOfInterest->point.y, nodeOfInterest->point.z, nodeOfInterest->t, nodeOfInterest->gcost, nodeOfInterest->hcost, fcost(nodeOfInterest));
             //check if that node is the goal
                 //if yes, win
         if(match(nodeOfInterest->point, end)) {
             success = 1;
             break;
         }
+
+        removeFromList(&openList, &openCount, index);
+        addToList(&closedList, &closedCount, nodeOfInterest);
             
         int numNeighbors = 0;
         node_t **neighborList = getNeighbors(map, nodeOfInterest, end, &numNeighbors);
@@ -147,12 +182,19 @@ path_t pathFind(map_t *map, point_t start, point_t end) {
             node_t *neighbor = neighborList[i];
             int alreadySeen = 0;
             for(int j = 0; j < closedCount; j++) {
-                if(match(neighbor->point, closedList[j]->point) && closedList[j]->t == neighbor->t) {
+                if(match(neighbor->point, closedList[j]->point) && abs(closedList[j]->t - neighbor->t) < 0.1) {
+                    alreadySeen = 1;
+                    break;
+                }
+            }
+            for(int j = 0; j < openCount; j++) {
+                if(match(neighbor->point, openList[j]->point) && abs(openList[j]->t - neighbor->t) < 0.1) {
                     alreadySeen = 1;
                     break;
                 }
             }
             if(alreadySeen == 1) {
+                //printf("Triggered already seen condition");
                 free(neighbor);
             } else if(neighbor->t > (tf-1)) { //I'm past the current time horizon
                 addToList(&openList, &openCount, neighbor); //add to the open list
@@ -163,24 +205,19 @@ path_t pathFind(map_t *map, point_t start, point_t end) {
             }
         }
         free(neighborList);
-            //get all neighbors of this node, for each
-                //check if on closed list -> yes, skip
-                //if I exceed the current map's final time -> everything is game
-                //if not
-                    //integer time
-                        //check value
-                            // 0->add to open list
-                            // 1->do not add to open list
-                            // 2->perform space check to determine if we add or not
-                    //if not integer time
-                        //check floor and ceiling
-                            //both zeros -> add to open list
-                            //either is a 1 -> do not add to open list
-                            //one is 2 -> perform space check, yes -> add to list
-                            //both are 2 -> perform space check, both yes -> add to list
+        //printf("Open list Size: %d, Closed List Size: %d\n", openCount, closedCount);
+        /*
+        for(int i = 0; i < openCount; i++) {
+            node_t *node = openList[i];
+            printf("    Open list node: (%d,%d,%d) @ %f w/ g = %f, h = %f, f = %f \n", node->point.x, node->point.y, node->point.z, node->t, node->gcost, node->hcost, fcost(node));
+
+        }
+        for(int i = 0; i < closedCount; i++) {
+            
+        }
+        usleep(100000);
+        */
         
-        removeFromList(&openList, &openCount, index);
-        addToList(&closedList, &closedCount, nodeOfInterest);
     }
 
     path_t path;

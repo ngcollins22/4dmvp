@@ -44,64 +44,42 @@ void dumpTensorAsBitsToFile(ot_t *ot, const char *filename) {
 
 
 int main() {
-    map_t* map = emptyMap(10, 10, 10, 1);
+    map_t* map = emptyMap(20, 20, 20, 1);
     FILE* out = fopen("test.txt", "w");
 
+    //point_t p1;
+    //point_t p2;
+    //p1.x = 0;
+    //p1.y = 0;
+    //p1.z = 0;
+    //p2.x = 9;
+    //p2.y = 9;
+    //p2.z = 9;
+    
+    for(int i = 0; i < 3; i++) {
+        srand((unsigned int)clock());
 
-    point_t p1;
-    point_t p2;
-    p1.x = 0;
-    p1.y = 0;
-    p1.z = 0;
+        point_t p1;
+        point_t p2;
+        p1.x = rand() % map->L;
+        p1.y = rand() % map->W;
+        p1.z = rand() % map->H;
 
-    p2.x = 9;
-    p2.y = 9;
-    p2.z = 9;
+        p2.x = rand() % map->L;
+        p2.y = rand() % map->W;
+        p2.z = rand() % map->H;
 
-    path_t path = pathFind(map, p1, p2);
-
-
-    printPath(path);
-    addPathToTensor(map->occupancytensor, &path);
-
-    p1.x = 2;
-    p1.y = 2;
-    p1.z = 2;
-    p2.x = 7;
-    p2.y = 6;
-    p2.z = 4;
-    path_t path2 = pathFind(map, p1, p2);
-    addPathToTensor(map->occupancytensor, &path2);
-    //dumpTensorAsBitsToFile(map->occupancytensor, "dump.txt");
-
-    printf("%d", pull(map, 9, 2, 0, 0));
-    /*
-    point_t p12;
-    point_t p22;
-    p12.x = 0;
-    p12.y = 1;
-    p12.z = 0;
-
-    p22.x = 6;
-    p22.y = 2;
-    p22.z = 2;
-
-    path_t path2 = pathFind(map, p12, p22);
-
-    printPath(path2);
-    addPathToTensor(map->occupancytensor, &path2);
-    */
-    /*
-    setValueAt(map->occupancytensor,5,2);
-    setValueAt(map->occupancytensor,6,1);
-    for(int i = 0; i < 8*4*2; i++) {
-        setValueAt(map->occupancytensor, i, i%4);
+        path_t path = pathFind(map, p1, p2);
+        printPath(path);
+        addPathToTensor(map->occupancytensor, &path);
+        freePath(path);
     }
-
-    printf("%d", getIndex(map->occupancytensor, 5, 0, 0, 0));
-    */
+    
+    //path_t path = pathFind(map, p1, p2);
+    //printPath(path);
+    //addPathToTensor(map->occupancytensor, &path);
+    //freePath(path);
     exportMap(map, out);
-    freePath(path);
     //freePath(path2);
     freeMap(map);
     fclose(out);

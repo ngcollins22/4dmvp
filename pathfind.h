@@ -2,6 +2,7 @@
 #include <math.h>
 
 
+
 /*
     Header file containing functions and utilites to pathfind
 */
@@ -32,6 +33,12 @@ typedef struct Path {
     float tf;
     int timeToSolvems;
 } path_t;
+
+typedef struct MinHeap {
+    node_t **nodes;
+    int size;
+    int capacity;
+} MinHeap_t;
 
 /*
     Function to return a list of neighbors.

@@ -97,12 +97,12 @@ int getValueAt(ot_t *ot, int index) {
     //printf("whatever this is: %b\n", (ot->occupancymap[arrayIndex]) & mask);
     uint8_t val = ((ot->occupancymap[arrayIndex]) & mask) >> (6 - 2*r); //god knows
     //printf("%d", val);
-    if(val == 1)  printf("isolated value: %b w/ r = %d at index %d\n", result, r, index);
+    //if(val == 1)  printf("isolated value: %b w/ r = %d at index %d\n", result, r, index);
     return val;
 }
 
 void setValueAt(ot_t *ot, int index, int value) {
-    printf("Setting %d to %d\n", index, value);
+    //printf("Setting %d to %d\n", index, value);
     int arrayIndex = index/4;
     //printf("arrayIndex:%d\n", arrayIndex);
     int r = index - arrayIndex*4;
