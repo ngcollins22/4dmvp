@@ -26,8 +26,8 @@ typedef struct Map {
     time_t referenceTime; // UTC "start of day"
     time_t startTime; // UTC start of this given map (should typically be now)
 
-    int timeStep_s; // integer number of seconds between timesteps
-    int unitWidth_m; // integer number of meters as length of cube space step
+    int tau; // integer number of seconds between timesteps
+    int chi; // integer number of meters as length of cube space step
     ot_t *occupancytensor; // 4D tensor representing occupancy over time
 
 } map_t;
@@ -60,13 +60,9 @@ extern int getValueAt(ot_t *ot, int index);
 
 extern void setValueAt(ot_t *ot, int index, int value);
 
-extern ot_t *copyTensor();
-
 extern void exportMap(map_t *map, FILE* out);
 
 extern void extendTimeHorizon(ot_t *ot, int n);
-
-extern void leftTruncate(ot_t *ot);
 
 /*
     TODO: I need a way to

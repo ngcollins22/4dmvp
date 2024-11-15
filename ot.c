@@ -35,8 +35,8 @@ map_t *emptyMap(int w, int l, int h, int tf) {
     map->referenceTime = midnight_utc;
     map->startTime = midnight_utc;
 
-    map->timeStep_s = 1; //arbitrary
-    map->unitWidth_m = 15; //arbitrary
+    map->tau = 1; //arbitrary
+    map->chi = 15; //arbitrary
 
     ot_t* ot = createTensor(w,l,h,tf);
     map->occupancytensor = ot;
@@ -162,5 +162,3 @@ void extendTimeHorizon(ot_t *ot, int n) {
     memset(ot->occupancymap + oldSize, 0, newSize - oldSize);
     ot->tf = ot->tf + n;
 }
-
-void leftTruncate(ot_t *ot);
