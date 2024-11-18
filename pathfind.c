@@ -9,6 +9,8 @@ const float wpsi = 0.1;
 const float wv = 1;
 const float wt = 1;
 
+int global_id_counter = 0;
+
 /*
     Known issues:
         Something's up with the weighting that makes things cycle sometimesz
@@ -130,50 +132,72 @@ int boundsCheck(map_t *map, state_t *state) {
 }
 
 int spaceCheck(map_t *map, state_t *state, vehicle_t vehicle){
-    //find where I would actually be at this point in time
-    int tLower = floor(state->time);
-    int tHigher = ceil(state->time);
-    if(tLower - tHigher < 0.05) { //avoid some floating point errors
-        // I'm on "integer time"
-        int xcoord = floor(state->position.x); //acquire the coordinate
-        int ycoord = floor(state->position.y); 
-        int zcoord = floor(state->position.z);
-        int val = pull(map, xcoord, ycoord, zcoord, tLower);
-        if(val == 0) {
-            //free node! 
-            return 1;
-        } else if (val == 1) {
-            return 0;
-        } else if (val == 2) {
-            //I need to do a detailed check
-            return 1; //REPLACE
+    // check the tensor for occupancy from the previous state x,y,z,t to the new state x,y,z,t
+    // this should not ever get called on the first node
+    point_t p1 = state->previous->position;
+    float t1 = state->previous->time;
+    point_t p2 = state->position;
+    float t2 = state->time;
+    // linearly interpolate between the two positions at steps of 1 chi each.
+        //check at each positional step the adjacent temporal locations
+    float length = dist(state->position, state->previous->position);
+    float nx = (p2.x - p1.x)/length;
+    float ny = (p2.y - p1.y)/length;
+    float nz = (p2.z - p1.z)/length;
+    int lengthInt = ceil(length);
+    //this loop can "integer miss" the final point, so we still need to manually check the final location
+    //cannot attempt to overshoot because it may exceed bounds!
+    for(int i = 0; i < lengthInt; i++) {
+        point_t controlPoint = add(p1, nx*i, ny*i, nz*i); //control point step
+        int xc = (int)floor(controlPoint.x); //find coordinates
+        int yc = (int)floor(controlPoint.y);
+        int zc = (int)floor(controlPoint.z);
+        //three temporal locations to check each
+        //floor of t1, ceil of t1, floor of t2, ceil of t2
+        int times[4] = {(int)floor(t1), (int)ceil(t1), (int)floor(t2), (int)ceil(t2)};
+        for(int j = 0; j < 4; j++) { //check each value
+            int val = pull(map, xc, yc, zc, times[j]);
+            if(val == 0) { //space is free
+                continue;
+            } else if (val == 1) { //space is NOT free
+                return 0; // a single non-free means it is not safe to traverse here
+            }  else if (val == 2) { //space may or may not be free
+                for(int dx = -vehicle.R; dx <= vehicle.R; dx++) {
+                    for(int dy = -vehicle.R; dy <= vehicle.R; dy++) {
+                        for(int dz = -vehicle.R; dy <= vehicle.R; dz++) {
+                            if(dx == 0 && dy == 0 && dz == 0) continue;
+                            int neighborVal = pull(map, xc + dx, yc + dy, zc + dz, times[j]);
+                            if(neighborVal == 1) return 0; //can't place a geofence here
+                        }
+                    }
+                }
+            }
         }
-    } else { //non-integer time
-        int valLower = pull(map, node->point.x, node->point.y, node->point.z, tLower);
-        int valHigher = pull(map, node->point.x, node->point.y, node->point.z, tHigher);
-        if(valLower == 0 && valHigher == 0) {
-            return 1;
-        } else if (valLower == 1 || valHigher == 1) {
-            return 0;
-        } else if (!(valLower == 2) !=  !(valHigher == 2)) { //one is a 2, one is a 0
-            //find which one is the two
-            return 1; //REPLACE
-        } else { //they're both 2s
-            return 1; //REPLACE
-        }
-        // I'm not on "integer time"
+
     }
+    return 1;
+}
+
+float dist(point_t p1, point_t p2) {
+    return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2));
+}
+
+point_t add(point_t p, float dx, float dy, float dz) {
+    p.x+=dx;
+    p.y+=dy;
+    p.z+=dz;
+    return p;
 }
 
 void spaceClaim(map_t *map, state_t *state);
 
-int closeEnough(map_t *map, state_t* a, point_t b) {
+int closeEnough(state_t* a, point_t b) {
     //purely a position thing here
     //check if two states are close enough in position to be considered identical
     return (pow((a->position.x) - b.x,2) + pow((a->position.y) - b.y,2) + pow((a->position.z) - b.z,2)) < 1 ? 1 : 0;
 }
 
-void calcCosts(state_t *state, vehicle_t vehicle, point_t endPoint) {
+void calcCosts(state_t *state, point_t endPoint) {
     state_t *prev = state->previous;
     float dx = state->position.x - prev->position.x;
     float dy = state->position.y - prev->position.y;
@@ -181,7 +205,7 @@ void calcCosts(state_t *state, vehicle_t vehicle, point_t endPoint) {
     float dpsi = fmod(state->heading - prev->heading, 2*M_PI);
     float dv = state->velocity - prev->velocity;
     float dt = state->time - prev->time;
-    float dg = sqrt(wx*pow(dx,2) + wy*pow(dy,2) + wz*pow(dx,2) + wpsi*pow(dpsi,2) + wv*pow(dv,2) + wt*pow(dt, 2));
+    float dg = sqrt(wx*pow(dx,2) + wy*pow(dy,2) + wz*pow(dz,2) + wpsi*pow(dpsi,2) + wv*pow(dv,2) + wt*pow(dt, 2));
     state->g = prev->g + dg;
     state->h = dist(state->position, endPoint);
 }
@@ -191,7 +215,7 @@ state_t* initialState(point_t startPoint, point_t endPoint, int t0, vehicle_t ve
     //initial velocity is preferred velocity?
     //t is the initial tau
 
-    state_t* state = (state_t*)malloc(sizeof(state_t));
+    state_t* state = (state_t*)calloc(1, sizeof(state_t));
     state->position = startPoint;
     state->time = t0;
     state->maneuver = YETTOMOVE;
@@ -200,6 +224,7 @@ state_t* initialState(point_t startPoint, point_t endPoint, int t0, vehicle_t ve
     state->heading = atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
     state->g = 0;
     state->h = dist(state->position, endPoint);
+    state->isFinalSolution = 0;
     return state;
 }
 
@@ -207,22 +232,29 @@ heap_t* trimNeighbors(map_t *map, heap_t *old, vehicle_t vehicle) {
     heap_t *new = createHeap(8); //8 maximum
     for(int i = 0; i < old->size; i++) { //for each neighbor
         state_t *state = extract(old);
-        if (!boundCheck(map, state)) { //if I fails the easy bounds check
+        if (!boundsCheck(map, state)) { //if I fails the easy bounds check
             //invalid node
+            //printf(" Bounds Check Failed: ");
+            //printState(state);
             free(state); //forget it
         } else if (spaceCheck(map, state, vehicle)) { // I pass the space check
+            //printf(" Space Check Passed: ");
+            //printState(state);
             insert(new, state);
         } else { //failed the space check
+            //printf(" Space Check Failed: ");
+            //printState(state);
             free(state);
         }
     }
+    return new;
     // for each neighbor
         //check if it's out of bounds
         //check if it's dangerous
             //if we reject one, free it and decrement the count
 
 }
-
+/*
 void addPathToTensor(ot_t *ot, path_t* path) {
     //add a solved path to a tensor - this is the geonfencing part
     int tf0 = ot->tf;
@@ -240,7 +272,7 @@ void addPathToTensor(ot_t *ot, path_t* path) {
         //printf("Setting a value \n");
     }
 }
-
+*/
 void pathFind(map_t *map, path_t *path) {
     /*
     psuedocode:
@@ -272,40 +304,67 @@ void pathFind(map_t *map, path_t *path) {
     */
     clock_t beginTime = clock();
 
-    heap_t *openList = createHeap(9999); //uhhhhhh
+    heap_t *openList = createHeap(1000); //uhhhhhh
     int success = 0;
 
     state_t* nodeOfInterest = initialState(path->startPoint, path->endPoint, path->ideal_tau_start, path->vehicle);
     insert(openList, nodeOfInterest);
 
+    path->initialh = nodeOfInterest->h;
+
     while(openList->size > 0) {
         nodeOfInterest = extract(openList); //pop best node off minheap
-
-        if (closeEnough(map, nodeOfInterest, path->endPoint)){
+        printf("        State: ");
+        printPoint(nodeOfInterest->position);
+        printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", nodeOfInterest->time, nodeOfInterest->velocity, nodeOfInterest->heading, nodeOfInterest->h, nodeOfInterest->g, maneuver_to_string(nodeOfInterest->maneuver));
+        printHeap(openList);
+        if (closeEnough(nodeOfInterest, path->endPoint)){
             success = 1;
             break; //we're there
         } 
 
         //create the list of kinematically feasible neighbors
         heap_t *kN = kinematicNeighbors(nodeOfInterest, path->vehicle);
+        //printHeap(kN);
         heap_t *N = trimNeighbors(map, kN, path->vehicle);
+        //printHeap(N);
         free(kN);
 
         //trim the list for geometric & occpancy reasons
 
         for(int i = 0; i < N->size; i++) {
             state_t *neighbor = extract(N);
-            calcCosts(neighbor, path->vehicle);
+            calcCosts(neighbor, path->endPoint);
             insert(openList, neighbor);
         }
         free(N);
     }
 
+    path->id = global_id_counter++; //assign and increment global counter
+
+    if(success == 1) {
+        path->solved = 1;
+        path->finalg = nodeOfInterest->g;
+        path->solution = nodeOfInterest;
+        while(nodeOfInterest != NULL) {
+            nodeOfInterest->isFinalSolution = 1;
+            nodeOfInterest = nodeOfInterest->previous;
+        }
+        //need to backtrack from final node to initial node
+        //actually need to create shallow copies of e
+    } else {
+        path->solved = -1;
+        path->solution = NULL;
+    }
+
+    cleanHeap(openList);
+
+    clock_t endTime = clock();
+    path->timeToSolve_ms =  1000*((double)(endTime - beginTime))/CLOCKS_PER_SEC; //record solution time
+
     //path solved, or not lol
 
-
-
-
+    /*
 
 
 
@@ -388,7 +447,7 @@ void pathFind(map_t *map, path_t *path) {
         }
         free(neighborList);
         //printf("Open list Size: %d, Closed List Size: %d\n", openCount, closedCount);
-        /*
+        
         for(int i = 0; i < openCount; i++) {
             node_t *node = openList[i];
             printf("    Open list node: (%d,%d,%d) @ %f w/ g = %f, h = %f, f = %f \n", node->point.x, node->point.y, node->point.z, node->t, node->gcost, node->hcost, fcost(node));
@@ -398,7 +457,7 @@ void pathFind(map_t *map, path_t *path) {
             
         }
         usleep(100000);
-        */
+        
         
     }
 
@@ -435,33 +494,71 @@ void pathFind(map_t *map, path_t *path) {
     free(closedList);
     
     return path;
-}
-  
-int spaceCheck(map_t *map, node_t *node) {
-    //check if I have space to place a geofence here
-
-
-    //if I have all zeros, I'm good
-
-    //if I have a 1, I'm not good
-
-
-    //if I have a 2
-        //collect every place where I would place a 1 if I were to be here
-        //if any of them are already 1s, im cooked
-    
+    */
 }
 
-void printPath(path_t path);
+void printPath(path_t *path) {
+    printf("Path Information:\n");
+    printf("    ID:%d   tau0:%d\n", path->id, path->ideal_tau_start);
+    printf("    Start Point: ");
+    printPoint(path->startPoint);
+    printf("\n    End Point: ");
+    printPoint(path->endPoint);
+    printf("\n Solution Found: %s", path->solved == 1 ? "Yes" : "No");
+    if(path->solved == 1) {
+        printf("\n     State Sequence:");
+        printStateSequence(path->solution);
+    }
+    printf("\n Solve Time (ms): %.2f\n", path->timeToSolve_ms);
+
+}
+
+void freePath(path_t *path) {
+    freeStateSequence(path->solution);
+    free(path);
+}
+
+void freeStateSequence(state_t *state) {
+    if(state == NULL) return;
+    freeStateSequence(state->previous);
+    free(state);
+}
+
+void printPoint(point_t point) {
+    printf("(x: %.2f, y: %.2f, z:%.2f)", point.x, point.y, point.z);
+}
+
+void printStateSequence(state_t *state) {
+    while(state != NULL) {
+        printf("        State: ");
+        printPoint(state->position);
+        printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", state->time, state->velocity, state->heading, state->h, state->g, maneuver_to_string(state->maneuver));
+        state = state->previous;
+    }
+}
+
+const char *maneuver_to_string(int maneuver) {
+    switch (maneuver) {
+        case CRUISE: return "CRUISE";
+        case ACCELERATE: return "ACCELERATE";
+        case DECELERATE: return "DECCELERATE";
+        case LEFT: return "LEFT";
+        case RIGHT: return "RIGHT";
+        case CLIMB: return "CLIMB";
+        case DESCEND: return "DESCEND";
+        case YETTOMOVE: return "YETTOMOVE";
+        default: return "UNKNOWN";
+    }
+}
 
 heap_t* createHeap(int capacity) {
-    heap_t *h = (heap_t*)malloc(sizeof(heap_t));
+    heap_t *h = (heap_t*)calloc(1,sizeof(heap_t));
 
     h->size = 0;
     h->capacity = capacity;
 
-    h->arr = (state_t**)malloc(capacity*sizeof(state_t*));
-
+    h->arr = (state_t**)calloc(1,capacity*sizeof(state_t*));
+    return h;
 }
 
 void insert(heap_t *h, state_t* value) {
@@ -504,7 +601,30 @@ state_t* extract(heap_t *h) {
     return min;
 }
 
-void printHeap(heap_t *h);
+void printState(state_t *state) {
+    printf("    State: ");
+    printPoint(state->position);
+    printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", state->time, state->velocity, state->heading, state->h, state->g, maneuver_to_string(state->maneuver));
+}
+
+void printHeap(heap_t *h) {
+    if (!h || h->size == 0) {
+        printf("Heap is empty.\n");
+        return;
+    }
+
+    printf("Min-Heap Contents:\n");
+    for (int i = 0; i < h->size; i++) {
+        printf("Index %d: ", i);
+        if (h->arr[i]) {
+            printState(h->arr[i]);
+        } else {
+            printf("NULL");
+        }
+        printf("\n");
+    }
+
+}
 
 void swap(state_t **a, state_t **b) {
     state_t *temp = *a;
@@ -516,7 +636,20 @@ float f_value(state_t* state) {
     return state->g + state->h;
 }
 
-extern void freeHeap(heap_t *h) {
+void freeHeap(heap_t *h) {
     free(h->arr);
     free(h);
+}
+
+void cleanHeap(heap_t *h) {
+    for(int i = 0; i < h->size; i++) {
+        state_t *state = extract(h);
+        trimBranch(state);
+    }
+}
+
+void trimBranch(state_t *state) {
+    if(state == NULL || state->isFinalSolution == 1) return;
+    trimBranch(state->previous);
+    free(state);
 }

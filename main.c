@@ -47,39 +47,27 @@ int main() {
     map_t* map = emptyMap(20, 20, 20, 1);
     FILE* out = fopen("test.txt", "w");
 
+    path_t *path = (path_t*)calloc(1, sizeof(path_t));
+
+    vehicle_t vehicle = {
+        .hdot = 1,
+        .psidot = 0.1,
+        .R = 2,
+        .vdot = 0.05,
+        .vpref = 2,
+        .vstall = 1
+    };
+
+    path->vehicle = vehicle;
+    path->ideal_tau_start = 0;
+    point_t start = {.x = 0, .y = 0, .z = 0};
+    point_t end = {.x = 10, .y = 10, .z = 2};
+    path->startPoint = start;
+    path->endPoint = end;
+    pathFind(map, path);
+    printPath(path);
+    freePath(path);
     //point_t p1;
-    //point_t p2;
-    //p1.x = 0;
-    //p1.y = 0;
-    //p1.z = 0;
-    //p2.x = 9;
-    //p2.y = 9;
-    //p2.z = 9;
-    
-    for(int i = 0; i < 3; i++) {
-        srand((unsigned int)clock());
-
-        point_t p1;
-        point_t p2;
-        p1.x = rand() % map->L;
-        p1.y = rand() % map->W;
-        p1.z = rand() % map->H;
-
-        p2.x = rand() % map->L;
-        p2.y = rand() % map->W;
-        p2.z = rand() % map->H;
-
-        path_t path = pathFind(map, p1, p2);
-        printPath(path);
-        addPathToTensor(map->occupancytensor, &path);
-        freePath(path);
-    }
-    
-    //path_t path = pathFind(map, p1, p2);
-    //printPath(path);
-    //addPathToTensor(map->occupancytensor, &path);
-    //freePath(path);
-    exportMap(map, out);
     //freePath(path2);
     freeMap(map);
     fclose(out);

@@ -93,7 +93,6 @@ int getValueAt(ot_t *ot, int index) {
     int arrayIndex = index/4;
     int r = index - arrayIndex*4;
     uint8_t mask = 192 >> (2*r); //mask to pull out appropriate uint8
-    uint8_t result = ((ot->occupancymap[arrayIndex]) & mask);
     //printf("whatever this is: %b\n", (ot->occupancymap[arrayIndex]) & mask);
     uint8_t val = ((ot->occupancymap[arrayIndex]) & mask) >> (6 - 2*r); //god knows
     //printf("%d", val);

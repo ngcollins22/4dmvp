@@ -6,6 +6,8 @@
     Header file containing functions and utilites to pathfind
 */
 
+typedef struct State state_t;
+
 typedef struct Point {
     float x, y, z;
 } point_t;
@@ -30,11 +32,12 @@ typedef struct State {
     float heading;
     float time;
 
-    state_t *previous;
+    state_t* previous;
     enum Maneuver maneuver;
 
     float h;
     float g;
+    int isFinalSolution;
 
 } state_t;
 
@@ -52,11 +55,14 @@ typedef struct Vehicle {
 
 typedef struct Path {
     //Setup portion
-    int id;
     vehicle_t vehicle;
     point_t startPoint;
     point_t endPoint;
     int ideal_tau_start;
+
+
+    //post-solution portion
+    int id;
     int solved;
 
     state_t* solution;    //list of states that is ultimately the solution
@@ -87,17 +93,25 @@ extern int boundsCheck(map_t *map, state_t *state); //done
 
 extern int spaceCheck(map_t *map, state_t *state, vehicle_t vehicle); //not done
 
-extern int closeEnough(map_t *map, state_t* a, point_t b); //done
+extern float dist(point_t p1, point_t p2);
 
-extern void calcCosts(state_t *state, vehicle_t vehicle, point_t endPoint); //done
+extern point_t add(point_t p, float dx, float dy, float dz);
+
+extern int closeEnough(state_t* a, point_t b); //done
+
+extern void calcCosts(state_t *state,point_t endPoint); //done
 
 extern state_t* initialState(point_t startPoint, point_t endPoint, int t0, vehicle_t vehicle_t); //done
 
 extern heap_t* trimNeighbors(map_t *map, heap_t *h, vehicle_t vehicle); //done (depends on others)?
 
-extern void printPath(path_t path); //needs update
+extern void printPath(path_t *path);
 
-extern void freePath(path_t path);
+extern void printPoint(point_t point);
+
+extern void freePath(path_t* path);
+
+extern void freeStateSequence(state_t *state);
 
 extern void addPathToMap(map_t *map, path_t* path);
 
@@ -116,3 +130,13 @@ extern void swap(state_t** a, state_t **b);
 extern float f_value(state_t* state);
 
 extern void freeHeap(heap_t *h);
+
+extern void cleanHeap(heap_t *h);
+
+extern void trimBranch(state_t *state);
+
+void printStateSequence(state_t *state);
+
+extern const char *maneuver_to_string(int maneuver);
+
+extern void printState(state_t *state);
