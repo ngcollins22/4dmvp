@@ -99,7 +99,7 @@ extern point_t add(point_t p, float dx, float dy, float dz);
 
 extern int closeEnough(state_t* a, point_t b); //done
 
-extern void calcCosts(state_t *state,point_t endPoint); //done
+extern void calcCosts(state_t *state, point_t endPoint, vehicle_t vehicle); //done
 
 extern state_t* initialState(point_t startPoint, point_t endPoint, int t0, vehicle_t vehicle_t); //done
 
@@ -113,9 +113,9 @@ extern void freePath(path_t* path);
 
 extern void freeStateSequence(state_t *state);
 
-extern void addPathToMap(map_t *map, path_t* path);
+extern void writePath(map_t *map, path_t *path);
 
-extern void spaceClaim(map_t *map, state_t *state);
+extern void spaceClaim(map_t *map, state_t *state, vehicle_t vehicle);
 
 extern heap_t* createHeap(int capacity);
 
@@ -135,7 +135,7 @@ extern void cleanHeap(heap_t *h);
 
 extern void trimBranch(state_t *state);
 
-void printStateSequence(state_t *state);
+extern void printStateSequence(state_t *state);
 
 extern const char *maneuver_to_string(int maneuver);
 

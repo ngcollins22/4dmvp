@@ -61,14 +61,16 @@ int main() {
     path->vehicle = vehicle;
     path->ideal_tau_start = 0;
     point_t start = {.x = 0, .y = 0, .z = 0};
-    point_t end = {.x = 10, .y = 10, .z = 2};
+    point_t end = {.x = 16, .y = 4, .z = 9};
     path->startPoint = start;
     path->endPoint = end;
     pathFind(map, path);
     printPath(path);
+    writePath(map, path);
     freePath(path);
     //point_t p1;
     //freePath(path2);
+    exportMap(map, out);
     freeMap(map);
     fclose(out);
 }

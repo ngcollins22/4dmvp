@@ -53,16 +53,42 @@ int pull(map_t *map, int x, int y, int z, int t) {
     return getValueAt(map->occupancytensor, n);
 }
 
+void push(map_t *map, int x, int y, int z, int t, int val) {
+    int n = getIndex(map->occupancytensor, x, y, z, t);
+    int oldVal = pull(map, x, y, z, t);
+    printf("Pushing a %d into a %d at (%d,%d,%d,%d)\n", val, oldVal, x, y, z, t);
+    //anything may replace a zero
+    //a 1 may replace a 2
+
+    setValueAt(map->occupancytensor, n, val);
+    /*
+    if(oldVal == 0 && val != 0) { //something replacing a zero
+        setValueAt(map->occupancytensor, n, val);
+    } else if(oldVal == 2 && val == 1) { // a 1 is replacing a two
+        setValueAt(map->occupancytensor, n, val);
+    } // a 1 is immutable
+    */
+}
+
 /*
     Create a new tensor with given dimensions
 */
 ot_t *createTensor(int w, int l, int h, int tf) {
     ot_t *ot = (ot_t*) malloc(sizeof(ot_t));
+    if (!ot) {
+        fprintf(stderr, "Failed to allocate memory for tensor\n");
+        exit(EXIT_FAILURE);
+    }
     ot->W = w;
     ot->H = h;
     ot->L = l;
     ot->tf = tf;
     uint8_t* tensor = (uint8_t*) calloc((((ot->W * ot->L * ot->H * (ot->tf + 1)) + 3) / 4), sizeof(char)); //each one needs 2 bits, this MAY overflow by up to 6 bits
+    if (!tensor) {
+        fprintf(stderr, "Failed to allocate memory for occupancy map\n");
+        free(ot);
+        exit(EXIT_FAILURE);
+    }
     //printf("Creating tensor with size: %d", (((ot->W * ot->L * ot->H * (ot->tf + 1)) + 3) / 4));
     ot->occupancymap = tensor;
     return ot;
@@ -86,6 +112,9 @@ int getIndex(ot_t *ot, int x, int y, int z, int t) { //does this work??
     int areaIndex = area*z; //index at which this x-y map starts
     int lineIndex = (ot->W)*y; //index at which this x sequence is at
     //printf("(%d,%d,%d,%d) -> %d\n", x, y, z, t, volumeIndex + areaIndex + lineIndex + x);
+    if (x < 0 || x >= ot->W || y < 0 || y >= ot->L || z < 0 || z >= ot->H || t < 0 || t >= ot->tf) {
+        return -1; // Sentinel value indicating out-of-bounds
+    }
     return volumeIndex + areaIndex + lineIndex + x;
 }
 
@@ -96,12 +125,12 @@ int getValueAt(ot_t *ot, int index) {
     //printf("whatever this is: %b\n", (ot->occupancymap[arrayIndex]) & mask);
     uint8_t val = ((ot->occupancymap[arrayIndex]) & mask) >> (6 - 2*r); //god knows
     //printf("%d", val);
-    //if(val == 1)  printf("isolated value: %b w/ r = %d at index %d\n", result, r, index);
+    //if(val == 2) printf("isolated value: %b w/ r = %d at index %d\n", val, r, index);
     return val;
 }
 
-void setValueAt(ot_t *ot, int index, int value) {
-    //printf("Setting %d to %d\n", index, value);
+void setValueAt(ot_t *ot, int index, uint8_t value) {
+    printf("Setting %d to %d\n", index, value);
     int arrayIndex = index/4;
     //printf("arrayIndex:%d\n", arrayIndex);
     int r = index - arrayIndex*4;
@@ -134,6 +163,7 @@ void exportMap(map_t *map, FILE *out) {
                     //int val = getValueAt(ot, index); //pull actual 2bit value
                     //if(val == 1) printf("penis");
                     int rawVal = pull(map, x, y, z, t);
+                    if(rawVal == 2) printf("2 encountered in export Map\n");
                     //printf("Raw value at (%d, %d, %d, %d): %d\n", x, y, z, t, rawVal);
                     fprintf(out, "%d%s", rawVal, (x == (ot->W - 1)) ? "" : ",");
                 }
@@ -153,7 +183,12 @@ void extendTimeHorizon(ot_t *ot, int n) {
     printf("New Size (bytes): %d\n", newSize);
 
     //how many bytes are currently allocated?
-    ot->occupancymap = realloc(ot->occupancymap, newSize);
+    uint8_t* newMap = realloc(ot->occupancymap, newSize);
+    if (!newMap) {
+        fprintf(stderr, "Failed to extend tensor memory\n");
+        exit(EXIT_FAILURE); // Or handle gracefully
+    }
+    ot->occupancymap = newMap;
     printf("Realloc worked? %d\n", ot->occupancymap != NULL);
     //memset everything to zeros
     //printf("Final Time = %d\n", ot->tf);

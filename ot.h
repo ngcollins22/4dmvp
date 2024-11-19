@@ -58,12 +58,13 @@ extern int getIndex(ot_t *ot, int x, int y, int z, int t);
 
 extern int getValueAt(ot_t *ot, int index);
 
-extern void setValueAt(ot_t *ot, int index, int value);
+extern void setValueAt(ot_t *ot, int index, uint8_t value);
 
 extern void exportMap(map_t *map, FILE* out);
 
 extern void extendTimeHorizon(ot_t *ot, int n);
 
+extern void push(map_t *map, int x, int y, int z, int t, int val);
 /*
     TODO: I need a way to
         Update a tensor with a new path that's just been planned
