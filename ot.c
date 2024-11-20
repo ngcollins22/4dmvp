@@ -55,8 +55,8 @@ int pull(map_t *map, int x, int y, int z, int t) {
 
 void push(map_t *map, int x, int y, int z, int t, int val) {
     int n = getIndex(map->occupancytensor, x, y, z, t);
-    int oldVal = pull(map, x, y, z, t);
-    printf("Pushing a %d into a %d at (%d,%d,%d,%d)\n", val, oldVal, x, y, z, t);
+    //int oldVal = pull(map, x, y, z, t);
+    //printf("Pushing a %d into a %d at (%d,%d,%d,%d)\n", val, oldVal, x, y, z, t);
     //anything may replace a zero
     //a 1 may replace a 2
 
@@ -130,7 +130,7 @@ int getValueAt(ot_t *ot, int index) {
 }
 
 void setValueAt(ot_t *ot, int index, uint8_t value) {
-    printf("Setting %d to %d\n", index, value);
+    //printf("Setting %d to %d\n", index, value);
     int arrayIndex = index/4;
     //printf("arrayIndex:%d\n", arrayIndex);
     int r = index - arrayIndex*4;
@@ -148,6 +148,8 @@ void setValueAt(ot_t *ot, int index, uint8_t value) {
 }
 
 void exportMap(map_t *map, FILE *out) {
+    printf("Writing to file... ");
+    fflush(stdout);
     fprintf(out,"(%d,%d,%d,%d)\n",map->W, map->L, map->H,map->occupancytensor->tf); //header
     //exportTensor(map->occupancytensor, out);
     ot_t *ot = map->occupancytensor;
@@ -163,7 +165,7 @@ void exportMap(map_t *map, FILE *out) {
                     //int val = getValueAt(ot, index); //pull actual 2bit value
                     //if(val == 1) printf("penis");
                     int rawVal = pull(map, x, y, z, t);
-                    if(rawVal == 2) printf("2 encountered in export Map\n");
+                    //if(rawVal == 2) printf("2 encountered in export Map\n");
                     //printf("Raw value at (%d, %d, %d, %d): %d\n", x, y, z, t, rawVal);
                     fprintf(out, "%d%s", rawVal, (x == (ot->W - 1)) ? "" : ",");
                 }
@@ -173,23 +175,24 @@ void exportMap(map_t *map, FILE *out) {
         }
         fprintf(out, "]%s\n",  (t == (ot->tf - 1)) ? "" : ",");
     }
+    printf(" Done\n");
 }
 
 void extendTimeHorizon(ot_t *ot, int n) {
+    printf("Extending Tensor Time Horizon: \n");
     //extend time horizon by n timesteps
     int oldSize = (((ot->W * ot->L * ot->H * (ot->tf + 1)) + 3) / 4);
-    printf("Previous Size (bytes): %d\n", oldSize);
+    printf("    Previous Size (bytes): %d\n", oldSize);
     int newSize = (((ot->W * ot->L * ot->H * (ot->tf + n + 1)) + 3) / 4);
-    printf("New Size (bytes): %d\n", newSize);
+    printf("    New Size (bytes): %d\n", newSize);
 
     //how many bytes are currently allocated?
     uint8_t* newMap = realloc(ot->occupancymap, newSize);
     if (!newMap) {
-        fprintf(stderr, "Failed to extend tensor memory\n");
+        fprintf(stderr, "Failed to extend tensor memory :( \n Get a better computer\n");
         exit(EXIT_FAILURE); // Or handle gracefully
     }
     ot->occupancymap = newMap;
-    printf("Realloc worked? %d\n", ot->occupancymap != NULL);
     //memset everything to zeros
     //printf("Final Time = %d\n", ot->tf);
 

@@ -2,25 +2,17 @@
 #include <unistd.h>
 
 
-const float wx = 1;
-const float wy = 1;
-const float wz = 2;
-const float wpsi = 0.1;
-const float wv = 3;
-const float wt = 1;
-const float w_off_vpref = 1;
-const float GREEDY_MULTIPLIER = 1.21;
+const float w = 0.5;
+const float GREEDY_MULTIPLIER = 1;
 
 int global_id_counter = 0;
 
 /*
-  Known issues:
-        Something's up with the weighting that makes things cycle sometimesz
-        Things are probably being re-added to the open list for some reason
-        The open and closed lists should really be replaced with hash tables or min heaps
-        Update "wait a step to launch" manuever to be as expensive as the entire heuristic
-
-        Need to actually implement spaceclaim and spacecheck
+    TODO: 
+        Monte carlo rig
+        export paths -> matlab
+        fix memory leak
+        add hash table for closed list (maybe next month?)
 */
 
 heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
@@ -35,6 +27,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     cruise->heading = state->heading;
     cruise->previous = state;
     cruise->maneuver = CRUISE;
+    cruise->isFinalSolution = 0;
     insert(h, cruise);
     //accelerate
     state_t *accelerate = (state_t*)calloc(1,sizeof(state_t));
@@ -46,6 +39,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     accelerate->heading = state->heading;
     accelerate->previous = state;
     accelerate->maneuver = ACCELERATE;
+    accelerate->isFinalSolution = 0;
     insert(h, accelerate);
     //decelerate
     state_t *decelerate = (state_t*)calloc(1,sizeof(state_t));
@@ -57,6 +51,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     decelerate->heading = state->heading;
     decelerate->previous = state;
     decelerate->maneuver = DECELERATE;
+    decelerate->isFinalSolution = 0;
     //check stall speed
     if(decelerate->velocity > vehicle.vstall) {
         insert(h, decelerate);
@@ -74,6 +69,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     left->heading = fmod(state->heading - vehicle.psidot*(1/state->velocity),2*M_PI);
     left->previous = state;
     left->maneuver = LEFT;
+    left->isFinalSolution = 0;
     insert(h, left);
     //right
     state_t *right = (state_t*)calloc(1,sizeof(state_t));
@@ -85,6 +81,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     right->heading = fmod(state->heading + vehicle.psidot*(1/state->velocity),2*M_PI);
     right->previous = state;
     right->maneuver = RIGHT;
+    right->isFinalSolution = 0;
     insert(h, right);
     //climb not done
     state_t *climb = (state_t*)calloc(1,sizeof(state_t));
@@ -96,6 +93,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     climb->heading = state->heading;
     climb->previous = state;
     climb->maneuver = CLIMB;
+    climb->isFinalSolution = 0;
     insert(h, climb);
     //descend not done
     state_t *descend = (state_t*)calloc(1,sizeof(state_t));
@@ -107,6 +105,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
     descend->heading = state->heading;
     descend->previous = state;
     descend->maneuver = DESCEND;
+    descend->isFinalSolution = 0;
     insert(h, descend);
     //need the delay maneuver
     //wait ONLY if I am directly at the start position
@@ -120,6 +119,7 @@ heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
         delay->heading = state->heading;
         delay->previous = state;
         delay->maneuver = YETTOMOVE; 
+        delay->isFinalSolution = 0;
         insert(h, delay);
     }
     return h;
@@ -167,6 +167,7 @@ int spaceCheck(map_t *map, state_t *state, vehicle_t vehicle){
                     for(int dy = -vehicle.R; dy <= vehicle.R; dy++) {
                         for(int dz = -vehicle.R; dz <= vehicle.R; dz++) {
                             if(dx == 0 && dy == 0 && dz == 0) continue;
+                            if(sqrt(pow(dx,2) + pow(dy,2) + pow(dz,2)) > vehicle.R) continue;
                             if(xc + dx >= map->W || xc + dx < 0 ||
                                yc + dy >= map->L || yc + dy < 0 ||
                                zc + dz >= map->H || zc + dz < 0) continue;
@@ -195,8 +196,8 @@ point_t add(point_t p, float dx, float dy, float dz) {
 
 void writePath(map_t *map, path_t *path) {
     state_t *currentNode = path->solution; //this is the final node
-    int n = (int)ceil(path->solution->time);
-    extendTimeHorizon(map->occupancytensor, (map->occupancytensor->tf) + n); //extend the time horizon to account for the new path
+    int ntf = (int)ceil(path->solution->time);
+    extendTimeHorizon(map->occupancytensor, ntf - (map->occupancytensor->tf)); //extend the time horizon to account for the new path
     while(currentNode->previous != NULL) {
         spaceClaim(map, currentNode, path->vehicle);
         currentNode = currentNode->previous;
@@ -232,6 +233,7 @@ void spaceClaim(map_t *map, state_t *state, vehicle_t vehicle) {
                         if(xc + dx >= map->W || xc + dx < 0 ||
                             yc + dy >= map->L || yc + dy < 0 ||
                             zc + dz >= map->H || zc + dz < 0) continue;
+                        if(sqrt(pow(dx,2) + pow(dy,2) + pow(dz,2)) > 2*vehicle.R) continue;
                         push(map, xc + dx, yc + dy, zc + dz, times[j], 0b10);
                     }
                 }
@@ -242,6 +244,7 @@ void spaceClaim(map_t *map, state_t *state, vehicle_t vehicle) {
                         if(xc + dx >= map->W || xc + dx < 0 ||
                             yc + dy >= map->L || yc + dy < 0 ||
                             zc + dz >= map->H || zc + dz < 0) continue;
+                        if(sqrt(pow(dx,2) + pow(dy,2) + pow(dz,2)) > vehicle.R) continue;
                         push(map, xc + dx, yc + dy, zc + dz, times[j], 0b01);
                     }
                 }
@@ -256,16 +259,18 @@ int closeEnough(state_t* a, point_t b) {
     return (pow((a->position.x) - b.x,2) + pow((a->position.y) - b.y,2) + pow((a->position.z) - b.z,2)) < 1 ? 1 : 0;
 }
 
+const float vTol = 0.05;
+const float psiTol = 0.01;
+
+int closeEnoughState(state_t* a, state_t* b) {
+    return closeEnough(a, b->position) && fabs(a->velocity - b->velocity) < vTol && fabs(a->heading - b->heading) < psiTol;
+}
+
+
 void calcCosts(state_t *state, point_t endPoint, vehicle_t vehicle) {
     state_t *prev = state->previous;
-    float dx = state->position.x - prev->position.x;
-    float dy = state->position.y - prev->position.y;
-    float dz = state->position.z - prev->position.z;
-    float dpsi = state->heading - prev->heading;
-    float dv = state->velocity - prev->velocity;
-    float dt = state->time - prev->time;
-    float dg = sqrt(wx*pow(dx,2) + wy*pow(dy,2) + wz*pow(dz,2) + wpsi*pow(dpsi,2) + wv*pow(dv,2) + wt*pow(dt, 2));
-    dg += sqrt(w_off_vpref*pow(state->velocity - vehicle.vpref,2));
+    float dt = state->time - state->previous->time;
+    float dg = w*dt + (1-w)*sqrt(pow(state->velocity - vehicle.vpref,2));
     state->g = prev->g + dg;
     state->h = GREEDY_MULTIPLIER*dist(state->position, endPoint);
 }
@@ -363,22 +368,23 @@ void pathFind(map_t *map, path_t *path) {
     
     */
     clock_t beginTime = clock();
-
-
     int success = 0;
 
     state_t* nodeOfInterest = initialState(path->startPoint, path->endPoint, path->ideal_tau_start, path->vehicle);
     path->initialh = nodeOfInterest->h;
-    heap_t *openList = createHeap(pow(path->initialh,6)); //uhhhhhh
+    heap_t *openList = createHeap(10000000); //uhhhhhh
+    state_t **closedList = (state_t**) calloc(10000000, sizeof(state_t*));
+    int closedCount = 0;
     insert(openList, nodeOfInterest);
-
 
     while(openList->size > 0) {
         nodeOfInterest = extract(openList); //pop best node off minheap
+        
         //printf("        State: ");
         //printPoint(nodeOfInterest->position);
         //printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", nodeOfInterest->time, nodeOfInterest->velocity, nodeOfInterest->heading, nodeOfInterest->h, nodeOfInterest->g, maneuver_to_string(nodeOfInterest->maneuver));
         //printHeap(openList);
+
         if (closeEnough(nodeOfInterest, path->endPoint)){
             success = 1;
             break; //we're there
@@ -389,17 +395,27 @@ void pathFind(map_t *map, path_t *path) {
         //printHeap(kN);
         heap_t *N = trimNeighbors(map, kN, path->vehicle);
         //printHeap(N);
-        free(kN);
+        freeHeap(kN);
 
         //trim the list for geometric & occpancy reasons
 
         while(N->size > 0) {
             state_t *neighbor = extract(N);
-            if(neighbor == NULL) break;
+            if(neighbor == NULL) continue;
             calcCosts(neighbor, path->endPoint, path->vehicle);
+            int inClosedList = 0;
+            for(int i = 0; i < closedCount; i++) {
+                if(closeEnoughState(neighbor, closedList[i])) {
+                    free(neighbor);
+                    inClosedList = 1;
+                    break;
+                }
+            }
+            if(inClosedList == 1) continue;
             insert(openList, neighbor);
         }
-        free(N);
+        freeHeap(N);
+        closedList[closedCount++] = nodeOfInterest;
     }
 
     path->id = global_id_counter++; //assign and increment global counter
@@ -421,6 +437,8 @@ void pathFind(map_t *map, path_t *path) {
 
     cleanHeap(openList);
     freeHeap(openList);
+    cleanList(closedList, closedCount);
+    free(closedList);
 
     clock_t endTime = clock();
     path->timeToSolve_ms =  1000*((double)(endTime - beginTime))/CLOCKS_PER_SEC; //record solution time
@@ -710,21 +728,13 @@ void freeHeap(heap_t *h) {
 void cleanHeap(heap_t *h) {
     while(h->size > 0) {
         state_t *state = extract(h);
-        if (state == NULL) continue;
-
-        if (state->isFinalSolution == 0) {
-            trimBranch(state);
-        }
+        free(state);
     }
 }
 
-void trimBranch(state_t *state) {
-    while (state != NULL) {
-        state_t *prev = state->previous;
-
-        if(state->isFinalSolution == 0) {
-            free(state);        
-        }
-        state = prev;
+void cleanList(state_t **list, int size) {
+    for(int i = 0; i < size; i++) {
+        state_t *state = list[i];
+        if(!state->isFinalSolution) free(state);
     }
 }

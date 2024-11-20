@@ -44,10 +44,12 @@ void dumpTensorAsBitsToFile(ot_t *ot, const char *filename) {
 
 
 int main() {
-    map_t* map = emptyMap(20, 20, 20, 1);
+    map_t* map = emptyMap(100, 100, 100, 1);
     FILE* out = fopen("test.txt", "w");
 
     path_t *path = (path_t*)calloc(1, sizeof(path_t));
+    path_t *path2 = (path_t*)calloc(1, sizeof(path_t));
+
 
     vehicle_t vehicle = {
         .hdot = 1,
@@ -60,16 +62,24 @@ int main() {
 
     path->vehicle = vehicle;
     path->ideal_tau_start = 0;
-    point_t start = {.x = 0, .y = 0, .z = 0};
-    point_t end = {.x = 16, .y = 4, .z = 9};
+    point_t start = {.x = 10, .y = 20, .z = 12};
+    point_t end = {.x = 40, .y = 40, .z = 19};
     path->startPoint = start;
     path->endPoint = end;
     pathFind(map, path);
     printPath(path);
     writePath(map, path);
+    path2->vehicle = vehicle;
+    path2->ideal_tau_start = 4;
+    point_t start2 = {.x = 20, .y = 10, .z = 12};
+    point_t end2 = {.x = 40, .y = 40, .z = 12};
+    path2->startPoint = start2;
+    path2->endPoint = end2;
+    pathFind(map, path2);
+    printPath(path2);
+    writePath(map, path2);
     freePath(path);
-    //point_t p1;
-    //freePath(path2);
+    freePath(path2);
     exportMap(map, out);
     freeMap(map);
     fclose(out);
