@@ -60,14 +60,12 @@ void push(map_t *map, int x, int y, int z, int t, int val) {
     //anything may replace a zero
     //a 1 may replace a 2
 
-    setValueAt(map->occupancytensor, n, val);
-    /*
+    int oldVal = pull(map, x, y, z, t);    
     if(oldVal == 0 && val != 0) { //something replacing a zero
         setValueAt(map->occupancytensor, n, val);
     } else if(oldVal == 2 && val == 1) { // a 1 is replacing a two
         setValueAt(map->occupancytensor, n, val);
     } // a 1 is immutable
-    */
 }
 
 /*
@@ -181,10 +179,10 @@ void exportMap(map_t *map, FILE *out) {
 void extendTimeHorizon(ot_t *ot, int n) {
     printf("Extending Tensor Time Horizon: \n");
     //extend time horizon by n timesteps
-    int oldSize = (((ot->W * ot->L * ot->H * (ot->tf + 1)) + 3) / 4);
-    printf("    Previous Size (bytes): %d\n", oldSize);
-    int newSize = (((ot->W * ot->L * ot->H * (ot->tf + n + 1)) + 3) / 4);
-    printf("    New Size (bytes): %d\n", newSize);
+    long oldSize = (((ot->W * ot->L * ot->H * (ot->tf + 1)) + 3) / 4);
+    printf("    Previous Size (bytes): %ld\n", oldSize);
+    long newSize = (((ot->W * ot->L * ot->H * (ot->tf + n + 1)) + 3) / 4);
+    printf("    New Size (bytes): %ld\n", newSize);
 
     //how many bytes are currently allocated?
     uint8_t* newMap = realloc(ot->occupancymap, newSize);

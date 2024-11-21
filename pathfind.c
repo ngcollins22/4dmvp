@@ -11,8 +11,6 @@ int global_id_counter = 0;
     TODO: 
         Monte carlo rig
         export paths -> matlab
-        fix memory leak
-        add hash table for closed list (maybe next month?)
 */
 
 heap_t* kinematicNeighbors(state_t* state, vehicle_t vehicle) {
@@ -197,7 +195,7 @@ point_t add(point_t p, float dx, float dy, float dz) {
 void writePath(map_t *map, path_t *path) {
     state_t *currentNode = path->solution; //this is the final node
     int ntf = (int)ceil(path->solution->time);
-    extendTimeHorizon(map->occupancytensor, ntf - (map->occupancytensor->tf)); //extend the time horizon to account for the new path
+    if(ntf > map->occupancytensor->tf) extendTimeHorizon(map->occupancytensor, ntf - (map->occupancytensor->tf)); //extend the time horizon to account for the new path
     while(currentNode->previous != NULL) {
         spaceClaim(map, currentNode, path->vehicle);
         currentNode = currentNode->previous;
@@ -260,12 +258,11 @@ int closeEnough(state_t* a, point_t b) {
 }
 
 const float vTol = 0.05;
-const float psiTol = 0.01;
+const float psiTol = 0.09;
 
 int closeEnoughState(state_t* a, state_t* b) {
     return closeEnough(a, b->position) && fabs(a->velocity - b->velocity) < vTol && fabs(a->heading - b->heading) < psiTol;
 }
-
 
 void calcCosts(state_t *state, point_t endPoint, vehicle_t vehicle) {
     state_t *prev = state->previous;
@@ -319,54 +316,8 @@ heap_t* trimNeighbors(map_t *map, heap_t *old, vehicle_t vehicle) {
             //if we reject one, free it and decrement the count
 
 }
-/*
-void addPathToTensor(ot_t *ot, path_t* path) {
-    //add a solved path to a tensor - this is the geonfencing part
-    int tf0 = ot->tf;
-    int tf1 = ceil(path->tf);
-    printf("tf0: %d, tf1: %d", tf0, tf1);
-    if(tf1 > tf0) { //my new path demands an extended time horizon
-        //extend the time horizon of the tensor
-        extendTimeHorizon(ot, ceil(tf1-tf0));
-    }
-    //populate the tensor with the path's waypoints geofenced
-    for(int i = 0; i < path->pathLength; i++) {
-        wp_t wp = path->waypoints[i];
-        printf("Waypoint: (%d,%d,%d) at t = %f setting values at t = %d and t = %d to 1", wp.location.x, wp.location.y, wp.location.z, wp.time, (int) floor(wp.time), (int) ceil(wp.time));
-        addWaypointToTensor(ot, wp);
-        //printf("Setting a value \n");
-    }
-}
-*/
+
 void pathFind(map_t *map, path_t *path) {
-    /*
-    psuedocode:
-        start the timer
-
-        grab the current occupancy map
-
-        create the initial state
-        calculate its costs
-
-        create openlist minheap
-        add initial node
-        create closedlist hashtable
-
-        while placed remain to be explored
-            pull the lowest cost node
-
-            check if its the goal or close enough to the goal
-
-
-        find all the kinematically feasible neighboring nodes
-
-        trim the neighbors by bounds
-
-        spacecheck each node for occupational feasibility
-
-        add winners to the open list
-    
-    */
     clock_t beginTime = clock();
     int success = 0;
 
@@ -380,9 +331,9 @@ void pathFind(map_t *map, path_t *path) {
     while(openList->size > 0) {
         nodeOfInterest = extract(openList); //pop best node off minheap
         
-        //printf("        State: ");
-        //printPoint(nodeOfInterest->position);
-        //printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", nodeOfInterest->time, nodeOfInterest->velocity, nodeOfInterest->heading, nodeOfInterest->h, nodeOfInterest->g, maneuver_to_string(nodeOfInterest->maneuver));
+        printf("        State: ");
+        printPoint(nodeOfInterest->position);
+        printf(" t: %.2f, v: %.2f, psi: %.2f, h: %.2f, g: %.2f, maneuver: %s\n", nodeOfInterest->time, nodeOfInterest->velocity, nodeOfInterest->heading, nodeOfInterest->h, nodeOfInterest->g, maneuver_to_string(nodeOfInterest->maneuver));
         //printHeap(openList);
 
         if (closeEnough(nodeOfInterest, path->endPoint)){
@@ -427,6 +378,7 @@ void pathFind(map_t *map, path_t *path) {
         while(nodeOfInterest != NULL) {
             nodeOfInterest->isFinalSolution = 1;
             nodeOfInterest = nodeOfInterest->previous;
+
         }
         //need to backtrack from final node to initial node
         //actually need to create shallow copies of e
@@ -593,6 +545,27 @@ void printPath(path_t *path) {
     printf("\n Solve Time (ms): %.2f\n", path->timeToSolve_ms);
 }
 
+void exportPath(path_t *path) {
+    char buffer[50];
+    sprintf(buffer, "path%d.csv",path->id);
+    FILE* out = fopen(buffer, "w");
+    if(out == NULL) {
+        fprintf(stderr, "Failed to open file for detailed path writing. \n");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(out, "x,y,z,t,v,psi,h,g,maneuver\n");
+    state_t *state = path->solution;
+    while(state != NULL) {
+        fprintf(out, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s\n",state->position.x, state->position.y, state->position.z, state->time, state->velocity, state->heading, state->h, state->g, maneuver_to_string(state->maneuver));
+        state = state->previous;
+    }
+    fclose(out);
+}
+
+void exportPathShort(FILE* out, path_t *path) {
+    fprintf(out, "%d, %d, %.2f, %.2f, %.2f\n", path->id, path->ideal_tau_start, path->initialh, path->finalg, path->timeToSolve_ms);
+}
+
 void freePath(path_t *path) {
     freeStateSequence(path->solution);
     free(path);
@@ -714,6 +687,10 @@ void swap(state_t **a, state_t **b) {
     state_t *temp = *a;
     *a = *b;
     *b = temp;
+}
+
+void resetGlobalIdCounter() {
+    global_id_counter = 0;
 }
 
 float f_value(state_t* state) {

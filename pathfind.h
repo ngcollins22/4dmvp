@@ -208,3 +208,9 @@ extern const char *maneuver_to_string(int maneuver);
 extern void printState(state_t *state);
 
 extern void cleanList(state_t **list, int size);
+
+extern void resetGlobalIdCounter();
+
+extern void exportPath(path_t *path);
+
+extern void exportPathShort(FILE* out, path_t *path);
